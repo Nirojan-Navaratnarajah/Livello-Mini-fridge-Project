@@ -1,0 +1,158 @@
+# GUI Python3 example on Raspberry Pi to handle notification from
+# ESP32 BLE_notify example.
+# To install bluepy for Python3:
+# $ sudo pip3 install bluepy
+
+import paho.mqtt.client as mqtt
+from bluepy import btle
+import time
+import os 
+import random
+
+command =""
+def on_connect(client, userdata, flags, rc):
+    print("Connected with result code "+str(rc))
+    client.subscribe("test")
+
+def on_message(client, userdata, msg):
+    global command
+    command = msg.payload.decode() 
+    print("                       Sending  message")
+  #client.disconnect()
+
+client = mqtt.Client()
+client.connect("localhost",1883,60)
+
+client.on_connect = on_connect
+client.on_message = on_message
+
+client.loop_start()
+
+#-------------------------------------------------------------------------------
+
+
+
+class MyDelegate(btle.DefaultDelegate):
+    def __init__(self):
+        btle.DefaultDelegate.__init__(self)
+        # ... initialise here
+     
+
+  
+    def writeCharacteristic(handle,val,withResponse):
+        print(withResponse)
+
+
+
+    def handleNotification(self, cHandle, data):
+
+       		# ... perhaps check cHandle
+
+		# # ... process 'data'  
+        if(cHandle==0x002a):
+
+            highbyte7=(data[1])
+            lowbit7=(data[0])
+            d=(data[2])
+            print("value of d :" +str (d))
+            word7=(highbyte7<<8)|lowbit7
+            if(d==1):
+                word7=(-1 * word7)
+               # print("the weight of J7 : -" +str(word7))
+            print("the weight of W(0)  : " +str(word7))
+            
+
+            xx=str(word7)
+            client.publish('/scale/J7', xx)
+
+
+ #-------------------------------------------------------------
+        elif(cHandle==0x002d):
+
+            highbyte=(data[1])
+            lowbit=(data[0])
+            d=(data[2])
+            print("value of d :" +str (d))
+            word=(highbyte<<8)|lowbit
+            if(d==1):
+                word=(-1 * word)
+               # print("the weight of J7 : -" +str(word7))
+            print("the weight of W(1)  : " +str(word))
+
+
+            xx=str(word)
+            client.publish('/scale/J5', xx)
+
+            
+            #os.system('clear')
+#address = "08:3A:F2:6E:29:CA"         #ESP32 Test Board
+address = "A4:CF:12:6B:60:1E"          #MAC Adress of LIV ESP32 Board
+
+service_uuid = "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+char_uuid = "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+char_uuid_02 = "dd2ca829-8b7e-4a1a-936e-3409f2c85855"
+
+
+"""
+setup_data for bluepy noification-
+"""
+
+handle=0x0030     #handle of the write characteristics
+
+
+enb=1
+while True:
+    
+    if enb==1:
+        try:
+           # print("Initialing connection with ESP32............")
+            p = btle.Peripheral(address)
+            p.setDelegate(MyDelegate())
+            enb=0
+            print("Connected to ESP32 of the Minibar-Livello "+str(enb))
+        except:
+            print("Not connected yet")  
+            enb=1
+            time.sleep(2)
+    elif enb==0:
+        try:
+            svc = p.getServiceByUUID(service_uuid)
+            ch = svc.getCharacteristics(char_uuid)[0]
+            ch_02 = svc.getCharacteristics(char_uuid_02)[0]
+            setup_data = b"\x01\x00"
+            p.writeCharacteristic(ch.valHandle + 1, setup_data)
+            p.writeCharacteristic(ch_02.valHandle + 1, setup_data)
+            ch_data = p.readCharacteristic(ch.valHandle + 1)
+            ch_data_02 = p.readCharacteristic(ch_02.valHandle + 1)
+            g= bytes('TEST', 'utf-8')
+            p.writeCharacteristic(handle, g)
+            print("WRITE TO ESP CODE LINE PASSED WITHOUT ERROR")
+            
+            print("inside the try with CVS   "+ str(enb))
+         
+            
+            enb=2
+            
+            
+        except:
+            print("something went wrong~!")
+            enb=1
+
+ 
+    if enb==2:   
+        print("                command>>>"+command)   
+        if command=="start":
+          #  print(command)       
+            g= bytes('start', 'utf-8')
+            p.writeCharacteristic(handle, g)
+            command=""
+      
+            #time.sleep(1)
+        if p.waitForNotifications(1):
+            # handleNotification() was called
+
+            time.sleep(0.2)
+         
+            continue
+
+
